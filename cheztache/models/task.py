@@ -17,6 +17,7 @@ class Task(Base):
 
     description = db.Column(db.UnicodeText, nullable=False)
     due = db.Column(db.Arrow)
+    waituntil = db.Column(db.Arrow)
     completed = db.Column(db.Arrow)
 
     number = db.Column(db.Integer, unique=True, default=default_task_number)
