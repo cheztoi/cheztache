@@ -10,6 +10,6 @@ def create_app(name='cheztache'):
     :return: flask app
     """
     app = Flask(name)
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///../db.chez-tache.sqlite'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/db.chez-tache.sqlite'  # noqa
     db.init_app(app)
     return app

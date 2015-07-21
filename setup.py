@@ -9,11 +9,11 @@ setup(
     author='Kelvin Hammond',
     author_email='hammond.kelvin@gmail.com',
     url='',
-    packages=['cheztache'],
+    packages=['chez.tache'],
     platforms='any',
     entry_points={
         'console_scripts': [
-            'cheztache = cheztache.commands:cli',
+            'ct = chez.tache.commands:cli',
         ]
     },
 )
