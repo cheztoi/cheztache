@@ -2,8 +2,8 @@ import click
 from tabulate import tabulate
 from .factory import create_app
 from .models import db
-from .models import Task
-from .services import TaskService
+from .models import Task, Project
+from .services import TaskService, ProjectService
 
 
 @click.group()
@@ -39,9 +39,15 @@ def add(ctx, app, arguments):
 @cli.command()
 @click.pass_obj
 @click.pass_context
+@click.option('--projects', is_flag=True, help="List projects")
 @click.argument('arguments', nargs=-1)
-def list(ctx, app, arguments):
+def list(ctx, app, projects, arguments):
     with app.app_context():
+        if projects:
+            for project in Project.query:
+                click.echo(project.name)
+            return
+
         query = Task.query
         if query.count():
             table = {
@@ -56,3 +62,19 @@ def list(ctx, app, arguments):
             click.echo(tabulate(table, headers="keys", tablefmt="pipe"))
         else:
             click.echo("No matching tasks")
+
+
+@cli.group()
+def create():
+    pass
+
+
+@create.command()
+@click.pass_obj
+@click.pass_context
+@click.argument('name', nargs=1)
+def project(ctx, app, name):
+    with app.app_context():
+        ps = ProjectService()
+        project = ps.get_or_create(name=name)
+        click.echo("Created project: {}".format(project.name))
