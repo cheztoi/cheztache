@@ -11,11 +11,18 @@ def default_task_number(context):
 
 
 class Task(Base):
+    PRIORITY_VALUES = (
+        (u'l', u'Low'),
+        (u'm', u'Medium'),
+        (u'h', u'High'),
+    )
+
     project_id = db.Column(db.UUID(binary=False), db.ForeignKey(Project.id))
     project = db.relationship(Project,
                               backref=db.backref("tasks", lazy='dynamic'))
 
     description = db.Column(db.UnicodeText, nullable=False)
+    priority = db.Column(db.Choice(PRIORITY_VALUES))
     due = db.Column(db.Arrow)
     waituntil = db.Column(db.Arrow)
     completed = db.Column(db.Arrow)
