@@ -32,7 +32,24 @@ class TaskService(BaseService):
         if 'project' in options:
             raise TaskServiceParseException("More than one project defined")
         ps = ProjectService()
-        options['project'] = ps.get_or_create(value)
+        options['project'] = ps.get_or_create(value, commit=False)
+        return options
+
+    def parse_priority_option(self, options, name, value):
+        """Parses the priority option"""
+        if 'priority' in options:
+            raise TaskServiceParseException("More than one priority defined")
+
+        if not value:
+            options['priority'] = None
+            return options
+
+        priority = value[0].lower()
+        if priority not in [x[0] for x in Task.PRIORITY_VALUES]:
+            raise TaskServiceParseException(
+                "Invalid priority value: {}".format(priority))
+
+        options['priority'] = priority
         return options
 
     def parse_option(self, options, name, value):
@@ -43,7 +60,8 @@ class TaskService(BaseService):
         :raises TaskServiceParseException: if key is too ambiguous
         """
         option_types = {
-            'project': self.parse_project_option
+            'project': self.parse_project_option,
+            'priority': self.parse_priority_option,
         }
         option_func = None
         for k, v in option_types.items():
