@@ -54,7 +54,7 @@ class TestTaskService(object):
             ts.parse_priority_option({}, 'priority', 'invalid')
 
     def test_from_arguments(self, ts):
-        arguments = 'hello world pri:H pro:test'
+        arguments = 'hello world pri:H pro:test due:today waituntil:yesterday'
         arguments = arguments.split(' ')
 
         count = Task.query.count()
@@ -67,6 +67,8 @@ class TestTaskService(object):
         assert task.project is not None
         assert task.project.id is not None
         assert task.project.name == 'test'
+        assert task.due.date() == arrow.now().date()
+        assert task.waituntil.date() == arrow.now().replace(days=-1).date()
 
     def test_parse_date_option(self, ts):
         # test weekday shorthand
@@ -81,6 +83,17 @@ class TestTaskService(object):
         options = ts.parse_date_option({}, 'test', date.format('YYYY-MM-DD'))
         assert 'test' in options
         assert options['test'].date() == date.date()
+
+        # test shortcuts
+        now = arrow.now()
+        shortcuts = {
+            'today': now,
+            'yesterday': now.replace(days=-1),
+            'tomorrow': now.replace(days=1),
+        }
+        for shortcut, day in shortcuts.iteritems():
+            options = ts.parse_date_option({}, 'test', shortcut)
+            assert options['test'].date() == day.date()
 
         # test duplicate
         with pytest.raises(TaskServiceParseException):
@@ -111,3 +124,36 @@ class TestTaskService(object):
         assert task.description == 'hello world'
         assert len(task.tags) == 3
         assert sorted(list(task.tags)) == sorted(['test', 'hello', 'world'])
+
+    def test_filter_by_arguments(self, ts):
+        arguments = 'hello world +test due:today'
+        task = ts.from_arguments(arguments.split(' '))
+        assert task is not None
+        assert task.id is not None
+        assert Task.query.count() > 0
+
+        arg_sets = [
+            '+test',
+            'hello',
+            'hello world',
+            'hello +test',
+            '+test due:today',
+        ]
+        for arg in arg_sets:
+            query = ts.filter_by_arguments(arg.split(' '))
+            assert query is not None
+            assert query.count() > 0
+            assert task in query.all()
+
+        arg_sets = [
+            '-test',
+            'hn',
+            'hello norld',
+            'hello -test',
+            'due:tomorrow +test',
+            'due:yesterday +test',
+        ]
+        for arg in arg_sets:
+            query = ts.filter_by_arguments(arg.split(' '))
+            assert query is not None
+            assert task not in query.all()

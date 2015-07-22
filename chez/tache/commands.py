@@ -44,7 +44,8 @@ def list(ctx, app, projects, arguments):
                 click.echo(project.name)
             return
 
-        query = Task.query
+        ts = TaskService()
+        query = ts.filter_by_arguments(arguments)
         if query.count():
             table = {
                 '#': [],
