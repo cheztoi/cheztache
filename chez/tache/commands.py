@@ -1,7 +1,6 @@
 import click
 from tabulate import tabulate
 from .factory import create_app
-from .models import db
 from .models import Task, Project
 from .services import TaskService, ProjectService
 
@@ -11,9 +10,6 @@ from .services import TaskService, ProjectService
 def cli(ctx):
     app = create_app()
     ctx.obj = app
-
-    with app.app_context():
-        db.create_all()
 
 
 @cli.command()
