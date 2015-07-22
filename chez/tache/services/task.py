@@ -1,5 +1,6 @@
 
 import re
+import arrow
 from .base import BaseService, BaseServiceException
 from .project import ProjectService
 from chez.tache.models import db, Task
@@ -52,6 +53,42 @@ class TaskService(BaseService):
         options['priority'] = priority
         return options
 
+    def parse_date_option(self, options, name, value):
+        """Helper to parse date option"""
+        if name in options:
+            raise TaskServiceParseException(
+                "More than one {} date defined".format(name))
+
+        value = value.strip()
+
+        # try to parse formated date
+        try:
+            date = arrow.get(value)
+            options[name] = date
+            return options
+        except arrow.parser.ParserError:
+            pass
+
+        weekday = value.lower()
+        now = arrow.now()
+        next_week = now.replace(days=8)
+        while now <= next_week:
+            if now.format('dddd').lower().startswith(weekday):
+                options[name] = now
+                return options
+            now = now.replace(days=1)
+
+        raise TaskServiceParseException(
+            "Invalid {0} date: {1}".format(name, value))
+
+    def parse_due_date(self, options, name, value):
+        """Parses due date"""
+        return self.parse_date_option(options, 'due', value)
+
+    def parse_waituntil_date(self, options, name, value):
+        """Parses waituntil date"""
+        return self.parse_date_option(options, 'waituntil', value)
+
     def parse_option(self, options, name, value):
         """
         Parses options and sets the proper options in the dictionary used for
@@ -62,6 +99,8 @@ class TaskService(BaseService):
         option_types = {
             'project': self.parse_project_option,
             'priority': self.parse_priority_option,
+            'due': self.parse_due_date,
+            'waituntil': self.parse_waituntil_date,
         }
         option_func = None
         for k, v in option_types.items():

@@ -1,5 +1,6 @@
 
 import pytest
+import arrow
 from chez.tache.models import Task, Project
 from chez.tache.services import TaskService
 from chez.tache.services.task import TaskServiceParseException
@@ -66,3 +67,33 @@ class TestTaskService(object):
         assert task.project is not None
         assert task.project.id is not None
         assert task.project.name == 'test'
+
+    def test_parse_date_option(self, ts):
+        # test weekday shorthand
+        options = ts.parse_date_option({}, 'test', 'Th')
+        assert 'test' in options
+        assert options['test'].format('dddd').lower() == 'thursday'
+        assert options['test'] > arrow.now()
+        assert options['test'] < arrow.now().replace(weeks=1)
+
+        # test formated date
+        date = arrow.get('2015-07-22')
+        options = ts.parse_date_option({}, 'test', date.format('YYYY-MM-DD'))
+        assert 'test' in options
+        assert options['test'].date() == date.date()
+
+        # test duplicate
+        with pytest.raises(TaskServiceParseException):
+            ts.parse_date_option(options, 'test', 'Mo')
+
+        # test invalid date
+        with pytest.raises(TaskServiceParseException):
+            ts.parse_date_option({}, 'val', 'Mayday')
+
+    def test_parse_due_date_option(self, ts):
+        options = ts.parse_due_date({}, 'test', 'Mo')
+        assert 'due' in options
+
+    def test_waituntil_date_option(self, ts):
+        options = ts.parse_waituntil_date({}, 'test', 'Wed')
+        assert 'waituntil' in options
