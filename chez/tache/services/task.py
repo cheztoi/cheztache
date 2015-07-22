@@ -10,9 +10,12 @@ class TaskService(BaseService):
     """Service to manage tasks"""
 
     DEFAULT_OPTION_REGEX = re.compile(r'^(\w+):(.*?)$')
+    DEFAULT_TAG_REGEX = re.compile(r'^\+(\w+)$')
 
-    def __init__(self, option_regex=DEFAULT_OPTION_REGEX):
+    def __init__(self, option_regex=DEFAULT_OPTION_REGEX,
+                 tag_regex=DEFAULT_TAG_REGEX):
         self.option_regex = option_regex
+        self.tag_regex = tag_regex
 
     def create(self, **kwargs):
         """Create a task with `**kwargs`"""
@@ -118,12 +121,12 @@ class TaskService(BaseService):
         options = {}
         for arg in arguments:
             option_match = self.option_regex.match(arg)
+            tag_match = self.tag_regex.match(arg)
             if option_match:
-                options = self.parse_option(options,
-                                            option_match.group(1),
-                                            option_match.group(2))
-            elif arg.startswith('+'):
-                tags.append(arg[1:])
+                options = self.parse_option(
+                    options, option_match.group(1), option_match.group(2))
+            elif tag_match:
+                tags.append(tag_match.group(1).lower())
             else:
                 description.append(arg)
 
@@ -131,7 +134,7 @@ class TaskService(BaseService):
             raise TaskServiceException("Invalid task description")
 
         options['description'] = ' '.join(description)
-        print("options: {}".format(options))
+        options['tags'] = tags
         task = self.create(**options)
         return task
 

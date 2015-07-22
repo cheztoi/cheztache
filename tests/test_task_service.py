@@ -1,7 +1,7 @@
 
 import pytest
 import arrow
-from chez.tache.models import Task, Project
+from chez.tache.models import Task, Project, Tag
 from chez.tache.services import TaskService
 from chez.tache.services.task import TaskServiceParseException
 
@@ -97,3 +97,17 @@ class TestTaskService(object):
     def test_waituntil_date_option(self, ts):
         options = ts.parse_waituntil_date({}, 'test', 'Wed')
         assert 'waituntil' in options
+
+    def test_tags(self, ts):
+        arguments = 'hello world +test +hello +world'
+
+        count = Task.query.count()
+        tag_count = Tag.query.count()
+
+        task = ts.from_arguments(arguments.split(' '))
+        assert Task.query.count() == (count + 1)
+        assert Tag.query.count() == (tag_count + 3)
+        assert task is not None
+        assert task.description == 'hello world'
+        assert len(task.tags) == 3
+        assert sorted(list(task.tags)) == sorted(['test', 'hello', 'world'])
