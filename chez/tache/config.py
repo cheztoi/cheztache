@@ -8,14 +8,14 @@ class DefaultConfig(object):
     TESTING = False
     ROOT_DIRECTORY = os.path.expanduser('~/.chez')
     SQLALCHEMY_DATABASE_URI = 'sqlite:///{}'.format(os.path.join(
-        ROOT_DIRECTORY, '/db.tache.sqlite'))
+        ROOT_DIRECTORY, 'db.tache.sqlite'))
 
 
 class DevelopmentConfig(DefaultConfig):
     DEBUG = True
     ROOT_DIRECTORY = '/tmp/chez'
     SQLALCHEMY_DATABASE_URI = 'sqlite:///{}'.format(os.path.join(
-        ROOT_DIRECTORY, '/db.tache.sqlite'))
+        ROOT_DIRECTORY, 'db.tache.sqlite'))
 
 
 class TestingConfig(DefaultConfig):
