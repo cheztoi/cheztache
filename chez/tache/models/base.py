@@ -3,11 +3,12 @@ import uuid
 from sqlalchemy.ext.declarative import declared_attr
 from flask.ext.sqlalchemy import SQLAlchemy
 from sqlalchemy_utils import Timestamp
-from sqlalchemy_utils import ArrowType, UUIDType
+from sqlalchemy_utils import ArrowType, UUIDType, ChoiceType
 
 db = SQLAlchemy()
 db.Arrow = ArrowType
 db.UUID = UUIDType
+db.Choice = ChoiceType
 
 
 class Base(db.Model, Timestamp):
