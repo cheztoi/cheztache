@@ -75,7 +75,7 @@ class TestTaskService(object):
         options = ts.parse_date_option({}, 'test', 'Th')
         assert 'test' in options
         assert options['test'].format('dddd').lower() == 'thursday'
-        assert options['test'] > arrow.now()
+        assert options['test'] > arrow.now().floor('day')
         assert options['test'] < arrow.now().replace(weeks=1)
 
         # test formated date
