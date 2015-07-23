@@ -6,7 +6,7 @@ import tempfile
 class DefaultConfig(object):
     DEBUG = False
     TESTING = False
-    ROOT_DIRECTORY = os.path.expanduser('~/.chez')
+    ROOT_DIRECTORY = os.path.expanduser('~/.config/chez')
     SQLALCHEMY_DATABASE_URI = 'sqlite:///{}'.format(os.path.join(
         ROOT_DIRECTORY, 'db.tache.sqlite'))
 
