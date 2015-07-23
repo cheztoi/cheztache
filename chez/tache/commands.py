@@ -56,7 +56,7 @@ def list(ctx, app, projects, arguments):
                 table['#'].append(task.number)
                 table['Pro'].append(task.project.name if task.project else '')
                 table['Description'].append(task.description)
-            click.echo(tabulate(table, headers="keys", tablefmt="pipe"))
+            click.echo(tabulate(table, headers="keys"))
         else:
             click.echo("No matching tasks")
 
