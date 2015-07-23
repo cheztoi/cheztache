@@ -1,7 +1,7 @@
 
 import pytest
 import arrow
-from chez.tache.models import Task, Project, Tag
+from chez.tache.models import db, Task, Project, Tag
 from chez.tache.services import TaskService
 from chez.tache.services.task import TaskServiceParseException
 
@@ -132,12 +132,15 @@ class TestTaskService(object):
         assert task.id is not None
         assert Task.query.count() > 0
 
+        # positives, should find task
         arg_sets = [
             '+test',
             'hello',
             'hello world',
             'hello +test',
             '+test due:today',
+            '+test +today',
+            '+test +TODAY',
         ]
         for arg in arg_sets:
             query = ts.filter_by_arguments(arg.split(' '))
@@ -145,15 +148,52 @@ class TestTaskService(object):
             assert query.count() > 0
             assert task in query.all()
 
+        # negatives, should not find task
         arg_sets = [
             '-test',
             'hn',
             'hello norld',
             'hello -test',
             'due:tomorrow +test',
+            '+tomorrow +test',
             'due:yesterday +test',
+            '+test +YESTERDAY',
         ]
         for arg in arg_sets:
             query = ts.filter_by_arguments(arg.split(' '))
             assert query is not None
             assert task not in query.all()
+
+    def test_virtual_tags(self, ts):
+        arguments = 'hello world +test due:yesterday'
+        task = ts.from_arguments(arguments.split(' '))
+        assert task is not None
+        assert task.id is not None
+        assert task.due < arrow.now()
+        assert Task.query.count() > 0
+
+        arg_sets = [
+            '+overdue',
+            '+test +overdue',
+            '+yesterday',
+            '+test due:yesterday',
+        ]
+        for arg in arg_sets:
+            query = ts.filter_by_arguments(arg.split(' '))
+            assert query is not None
+            assert query.count() > 0
+            assert task in query.all()
+
+        task.due = arrow.now().replace(days=1)
+        db.session.add(task)
+        db.session.commit()
+
+        arg_sets = [
+            '+tomorrow',
+            '+test +tomorrow',
+        ]
+        for arg in arg_sets:
+            query = ts.filter_by_arguments(arg.split(' '))
+            assert query is not None
+            assert query.count() > 0
+            assert task in query.all()

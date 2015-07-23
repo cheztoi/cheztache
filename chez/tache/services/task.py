@@ -1,6 +1,7 @@
 
 import re
 import arrow
+from sqlalchemy import and_, not_
 from sqlalchemy_utils import escape_like
 from .base import BaseService, BaseServiceException
 from .project import ProjectService
@@ -139,12 +140,29 @@ class TaskService(BaseService):
                 option_func = v
         return option_func(options, name, value)
 
-    def parse_arguments(self, arguments, negatives=False):
+    def create_date_filter(self, column, day):
+        """Creates date filters which matches ranges"""
+        start, end = day.span('day')
+        return and_(column >= start, column <= end)
+
+    @property
+    def virtual_tags(self):
+        """Creates the filters for virtual tags"""
+        now = arrow.now()
+        return {
+            'TODAY': self.create_date_filter(Task.due, now),
+            'YESTERDAY': self.create_date_filter(
+                Task.due, now.replace(days=-1)),
+            'TOMORROW': self.create_date_filter(Task.due, now.replace(days=1)),
+            'OVERDUE': and_(Task.due <= now, Task.completed == None),  # noqa
+        }
+
+    def parse_arguments(self, arguments, with_filters=False):
         """Parse command line arguemnts and return an options dictionary"""
         description = []
         tags = []
         options = {}
-        negative_filters = {'tags': []}
+        filters = {'all': []}
         for arg in arguments:
             option_match = self.option_regex.match(arg)
             tag_match = self.tag_regex.match(arg)
@@ -152,11 +170,21 @@ class TaskService(BaseService):
                 options = self.parse_option(
                     options, option_match.group(1), option_match.group(2))
             elif tag_match:
+                sign = tag_match.group(1)
                 tag = tag_match.group(2).lower()
-                if tag_match.group(1) == '+':
+                virtual_tags = self.virtual_tags
+
+                if tag.upper() in virtual_tags:
+                    if sign == '-':
+                        filters['all'].append(not_(virtual_tags[tag.upper()]))
+                    else:
+                        filters['all'].append(virtual_tags[tag.upper()])
+                elif sign == '+':
                     tags.append(tag)
                 else:
-                    negative_filters['tags'].append(tag)
+                    ilike = u'%{}%'.format(escape_like(tag))
+                    filters['all'].append(
+                        Task.tags.any(Tag.name.notilike(ilike)))
             else:
                 description.append(arg)
 
@@ -164,13 +192,13 @@ class TaskService(BaseService):
             options['description'] = ' '.join(description)
         if tags:
             options['tags'] = tags
-        if negatives:
-            options['negative_filters'] = negative_filters
+        if with_filters:
+            options['filters'] = filters
         return options
 
     def from_arguments(self, arguments):
         """Parse command line arguments and create a task, project, etc"""
-        options = self.parse_arguments(arguments, negatives=False)
+        options = self.parse_arguments(arguments, with_filters=False)
         if not options.get('description', None):
             raise TaskServiceParseException("Invalid task description")
 
@@ -178,8 +206,8 @@ class TaskService(BaseService):
 
     def filter_by_arguments(self, arguments):
         """Parse command line arguments and create a sql query"""
-        options = self.parse_arguments(arguments, negatives=True)
-        negatives = options.pop('negative_filters', {})
+        options = self.parse_arguments(arguments, with_filters=True)
+        filters = options.pop('filters', {})
 
         query = Task.query
         for name, value in options.iteritems():
@@ -197,8 +225,7 @@ class TaskService(BaseService):
                         val = u'%{}%'.format(val)
                         query = query.filter(column.any(Tag.name.ilike(val)))
             elif isinstance(value, arrow.Arrow):
-                start, end = value.span('day')
-                query = query.filter(column >= start).filter(column <= end)
+                query = query.filter(self.create_date_filter(column, value))
             elif isinstance(value, Project):
                 query = query.filter(column == value)
             elif value is None:
@@ -208,9 +235,8 @@ class TaskService(BaseService):
                     "Invalid query value: {}".format(value))
 
         # handle negatives
-        for name in negatives['tags']:
-            name = u'%{}%'.format(name.lower().strip())
-            query = query.filter(Task.tags.any(Tag.name.notilike(name)))
+        for filter in filters['all']:
+            query = query.filter(filter)
 
         return query
 
