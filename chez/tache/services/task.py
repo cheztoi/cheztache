@@ -279,6 +279,10 @@ class TaskService(BaseService):
         options = self.parse_arguments(arguments, with_clauses=True)
         clauses = options.pop('clauses', [])
 
+        if isinstance(defaults, basestring):  # noqa
+            defaults = defaults.split(' ')
+        if isinstance(defaults, list):
+            defaults = self.parse_arguments(defaults, with_clauses=True)
         if not defaults:
             defaults = {}
         defaults = copy.deepcopy(defaults)
