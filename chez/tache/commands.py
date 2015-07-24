@@ -4,7 +4,7 @@ import sqlalchemy
 from sqlalchemy.sql import or_
 from tabulate import tabulate
 from .factory import create_app
-from .models import Task, Project
+from .models import db, Task, Project
 from .services import TaskService, ProjectService
 
 
@@ -97,8 +97,11 @@ def done(ctx, app, ids):
                 click.echo("Invalid task id: {}".format(i))
                 ctx.exit()
 
+        now = arrow.now()
         for task in tasks:
-            task.delete()
+            task.completed = now
+            db.session.add(task)
+        db.session.commit()
 
 
 @cli.group()
