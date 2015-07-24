@@ -14,7 +14,7 @@ class TestTaskService(object):
 
     def test_create_and_get(self, ts):
         count = Task.query.count()
-        task = ts.create(description='Hello world')
+        task = ts.create(description=u'Hello world')
         assert task is not None
         assert task.id is not None
         assert task.priority is None
@@ -28,7 +28,7 @@ class TestTaskService(object):
     def test_parse_project_option(self, ts):
         count = Task.query.count()
 
-        options = ts.parse_project_option({}, 'project', 'test')
+        options = ts.parse_project_option({}, 'project', u'test')
         assert 'project' in options
         assert isinstance(options['project'], Project)
         assert options['project'].id is None
@@ -38,7 +38,7 @@ class TestTaskService(object):
         assert Task.query.count() == count
 
         with pytest.raises(TaskServiceParseException):
-            ts.parse_project_option({'project': None}, 'project', 'test')
+            ts.parse_project_option({'project': None}, 'project', u'test')
 
     def test_parse_priority_option(self, ts):
         for v in ('high', 'medium', 'low', 'l', 'h', 'm', 'hi', 'lo', None):
@@ -54,7 +54,7 @@ class TestTaskService(object):
             ts.parse_priority_option({}, 'priority', 'invalid')
 
     def test_from_arguments(self, ts):
-        arguments = 'hello world pri:H pro:test due:today waituntil:yesterday'
+        arguments = u'hello world pri:H pro:test due:today waituntil:yesterday'
         arguments = arguments.split(' ')
 
         count = Task.query.count()
@@ -67,8 +67,9 @@ class TestTaskService(object):
         assert task.project is not None
         assert task.project.id is not None
         assert task.project.name == 'test'
-        assert task.due.date() == arrow.now().date()
-        assert task.waituntil.date() == arrow.now().replace(days=-1).date()
+        assert task.due.to('local').date() == arrow.now().date()
+        assert task.waituntil.to(
+            'local').date() == arrow.now().replace(days=-1).date()
 
     def test_parse_date_option(self, ts):
         # test weekday shorthand
@@ -112,7 +113,7 @@ class TestTaskService(object):
         assert 'waituntil' in options
 
     def test_tags(self, ts):
-        arguments = 'hello world +test +hello +world'
+        arguments = u'hello world +test +hello +world'
 
         count = Task.query.count()
         tag_count = Tag.query.count()
@@ -126,7 +127,7 @@ class TestTaskService(object):
         assert sorted(list(task.tags)) == sorted(['test', 'hello', 'world'])
 
     def test_filter_by_arguments(self, ts):
-        arguments = 'hello world +test due:today'
+        arguments = u'hello world +test due:today'
         task = ts.from_arguments(arguments.split(' '))
         assert task is not None
         assert task.id is not None
@@ -134,13 +135,13 @@ class TestTaskService(object):
 
         # positives, should find task
         arg_sets = [
-            '+test',
-            'hello',
-            'hello world',
-            'hello +test',
-            '+test due:today',
-            '+test +today',
-            '+test +TODAY',
+            u'+test',
+            u'hello',
+            u'hello world',
+            u'hello +test',
+            u'+test due:today',
+            u'+test +today',
+            u'+test +TODAY',
         ]
         for arg in arg_sets:
             query = ts.filter_by_arguments(arg.split(' '))
@@ -150,14 +151,14 @@ class TestTaskService(object):
 
         # negatives, should not find task
         arg_sets = [
-            '-test',
-            'hn',
-            'hello norld',
-            'hello -test',
-            'due:tomorrow +test',
-            '+tomorrow +test',
-            'due:yesterday +test',
-            '+test +YESTERDAY',
+            u'-test',
+            u'hn',
+            u'hello norld',
+            u'hello -test',
+            u'due:tomorrow +test',
+            u'+tomorrow +test',
+            u'due:yesterday +test',
+            u'+test +YESTERDAY',
         ]
         for arg in arg_sets:
             query = ts.filter_by_arguments(arg.split(' '))
@@ -165,7 +166,7 @@ class TestTaskService(object):
             assert task not in query.all()
 
     def test_virtual_tags(self, ts):
-        arguments = 'hello world +test due:yesterday'
+        arguments = u'hello world +test due:yesterday'
         task = ts.from_arguments(arguments.split(' '))
         assert task is not None
         assert task.id is not None
@@ -173,10 +174,10 @@ class TestTaskService(object):
         assert Task.query.count() > 0
 
         arg_sets = [
-            '+overdue',
-            '+test +overdue',
-            '+yesterday',
-            '+test due:yesterday',
+            u'+overdue',
+            u'+test +overdue',
+            u'+yesterday',
+            u'+test due:yesterday',
         ]
         for arg in arg_sets:
             query = ts.filter_by_arguments(arg.split(' '))
@@ -189,8 +190,8 @@ class TestTaskService(object):
         db.session.commit()
 
         arg_sets = [
-            '+tomorrow',
-            '+test +tomorrow',
+            u'+tomorrow',
+            u'+test +tomorrow',
         ]
         for arg in arg_sets:
             query = ts.filter_by_arguments(arg.split(' '))

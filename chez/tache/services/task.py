@@ -1,11 +1,89 @@
 
 import re
 import arrow
+import copy
 from sqlalchemy import and_, not_
 from sqlalchemy_utils import escape_like
 from .base import BaseService, BaseServiceException
 from .project import ProjectService
 from chez.tache.models import db, Task, Project, Tag
+
+
+class Clause(object):
+    def __init__(self, name, value=None, isnot=False, clause=None):
+        self.name = name
+        self.value = value
+        self.isnot = isnot
+        self.clause = clause
+
+    def get_clause(self):
+        """Returns a sqlalchemy for this clause"""
+        clause = self.clause
+
+        if clause is None:
+            column = getattr(Task, self.name, None)
+            if not column:
+                raise TaskServiceParseException(
+                    "Invalid clause param: {}".format(self.name))
+
+            if self.name.lower() == 'tags':
+                if isinstance(self.value, list):
+                    _clauses = []
+                    for val in self.value:
+                        _clauses.append(self.create_tags_clause(val))
+                    clause = and_(*_clauses)
+                else:
+                    clause = self.create_tags_clause(self.value)
+            elif isinstance(self.value, basestring):  # noqa
+                clause = self.create_text_clause(column, self.value)
+            elif isinstance(self.value, arrow.Arrow):
+                clause = self.create_date_clause(column, self.value)
+            elif isinstance(self.value, Project):
+                clause = self.create_project_clause(column, self.value)
+            elif self.value is None:
+                clause = self.create_null_clause(column)
+            else:
+                raise TaskServiceParseException(
+                    "Invalid query value: {}".format(self.value))
+
+        if self.isnot:
+            clause = not_(clause)
+        return clause
+
+    def create_null_clause(self, column):
+        """Creates a clause for a column which should be null"""
+        return column == None  # noqa
+
+    def create_project_clause(self, column, value):
+        """Creates a clause for a Project"""
+        return column == value
+
+    def create_text_clause(self, column, value):
+        """Creates a clause for text"""
+        return column.ilike(u'%{}%'.format(escape_like(value.strip())))
+
+    def create_tags_clause(self, tag):
+        """Creates a clause for a tag"""
+        tag = tag.lower()
+        return Task.tags.any(Tag.name.ilike(u'%{}%'.format(escape_like(tag))))
+
+    @classmethod
+    def create_date_clause(cls, column, day):
+        """Creates date clauses which matches ranges"""
+        start, end = day.span('day')
+        return and_(column >= start, column <= end)
+
+    @classmethod
+    def virtual_tags(cls):
+        """Creates the clauses for virtual tags"""
+        now = arrow.now()
+        return {
+            'TODAY': cls.create_date_clause(Task.due, now),
+            'YESTERDAY': cls.create_date_clause(
+                Task.due, now.replace(days=-1)),
+            'TOMORROW': cls.create_date_clause(Task.due, now.replace(days=1)),
+            'OVERDUE': and_(Task.due <= now, Task.completed == None),  # noqa
+        }
 
 
 class TaskService(BaseService):
@@ -140,29 +218,18 @@ class TaskService(BaseService):
                 option_func = v
         return option_func(options, name, value)
 
-    def create_date_filter(self, column, day):
-        """Creates date filters which matches ranges"""
-        start, end = day.span('day')
-        return and_(column >= start, column <= end)
+    def parse_arguments(self, arguments, with_clauses=False):
+        """
+        Parse command line arguemnts and return an options dictionary
 
-    @property
-    def virtual_tags(self):
-        """Creates the filters for virtual tags"""
-        now = arrow.now()
-        return {
-            'TODAY': self.create_date_filter(Task.due, now),
-            'YESTERDAY': self.create_date_filter(
-                Task.due, now.replace(days=-1)),
-            'TOMORROW': self.create_date_filter(Task.due, now.replace(days=1)),
-            'OVERDUE': and_(Task.due <= now, Task.completed == None),  # noqa
-        }
-
-    def parse_arguments(self, arguments, with_filters=False):
-        """Parse command line arguemnts and return an options dictionary"""
+        :param with_clauses: if True, options will include `'clauses'` which
+                             are negative clauses for negative tags and virtual
+                             tags. Used internally.
+        """
         description = []
         tags = []
         options = {}
-        filters = {'all': []}
+        clauses = []
         for arg in arguments:
             option_match = self.option_regex.match(arg)
             tag_match = self.tag_regex.match(arg)
@@ -172,19 +239,18 @@ class TaskService(BaseService):
             elif tag_match:
                 sign = tag_match.group(1)
                 tag = tag_match.group(2).lower()
-                virtual_tags = self.virtual_tags
+                virtual_tags = Clause.virtual_tags()
 
                 if tag.upper() in virtual_tags:
-                    if sign == '-':
-                        filters['all'].append(not_(virtual_tags[tag.upper()]))
-                    else:
-                        filters['all'].append(virtual_tags[tag.upper()])
-                elif sign == '+':
-                    tags.append(tag)
+                    clauses.append(Clause(name='virtual',
+                                          isnot=(sign == '-'),
+                                          clause=virtual_tags[tag.upper()]))
                 else:
-                    ilike = u'%{}%'.format(escape_like(tag))
-                    filters['all'].append(
-                        Task.tags.any(Tag.name.notilike(ilike)))
+                    if sign == '+':
+                        tags.append(tag)
+                    elif sign == '-':
+                        clause = Clause(name='tags', value=tag, isnot=True)
+                        clauses.append(clause)
             else:
                 description.append(arg)
 
@@ -192,51 +258,39 @@ class TaskService(BaseService):
             options['description'] = ' '.join(description)
         if tags:
             options['tags'] = tags
-        if with_filters:
-            options['filters'] = filters
+        if with_clauses:
+            options['clauses'] = clauses
         return options
 
     def from_arguments(self, arguments):
         """Parse command line arguments and create a task, project, etc"""
-        options = self.parse_arguments(arguments, with_filters=False)
+        options = self.parse_arguments(arguments, with_clauses=False)
         if not options.get('description', None):
             raise TaskServiceParseException("Invalid task description")
 
         return self.create(**options)
 
-    def filter_by_arguments(self, arguments):
-        """Parse command line arguments and create a sql query"""
-        options = self.parse_arguments(arguments, with_filters=True)
-        filters = options.pop('filters', {})
+    def filter_by_arguments(self, arguments, defaults=None):
+        """
+        Parse command line arguments and create a sql query
+
+        :params defaults: default options
+        """
+        options = self.parse_arguments(arguments, with_clauses=True)
+        clauses = options.pop('clauses', [])
+
+        if not defaults:
+            defaults = {}
+        defaults = copy.deepcopy(defaults)
+        clauses.extend(defaults.pop('clauses', []))
+        defaults.update(options)
+
+        for name, value in defaults.iteritems():
+            clauses.append(Clause(name=name, value=value))
 
         query = Task.query
-        for name, value in options.iteritems():
-            column = getattr(Task, name, None)
-            if not column:
-                raise TaskServiceParseException(
-                    "Invalid query param: {}".format(name))
-
-            if isinstance(value, basestring):  # noqa
-                query = query.filter(
-                    column.ilike(u'%{}%'.format(escape_like(value.strip()))))
-            elif isinstance(value, list) and name.lower() == 'tags':
-                for val in value:
-                    if name.lower() == 'tags':
-                        val = u'%{}%'.format(val)
-                        query = query.filter(column.any(Tag.name.ilike(val)))
-            elif isinstance(value, arrow.Arrow):
-                query = query.filter(self.create_date_filter(column, value))
-            elif isinstance(value, Project):
-                query = query.filter(column == value)
-            elif value is None:
-                query = query.filter(column == None)  # noqa
-            else:
-                raise TaskServiceParseException(
-                    "Invalid query value: {}".format(value))
-
-        # handle negatives
-        for filter in filters['all']:
-            query = query.filter(filter)
+        for clause in clauses:
+            query = query.filter(clause.get_clause())
 
         return query
 
