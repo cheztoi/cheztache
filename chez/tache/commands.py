@@ -1,4 +1,5 @@
 import click
+import arrow
 from tabulate import tabulate
 from .factory import create_app
 from .models import Task, Project
@@ -45,7 +46,10 @@ def list(ctx, app, projects, arguments):
             return
 
         ts = TaskService()
-        query = ts.filter_by_arguments(arguments)
+        defaults = ''
+        query = ts.filter_by_arguments(arguments, defaults=defaults)
+        query = query.filter(Task.completed == None)  # noqa
+        query = query.filter(Task.waituntil <= arrow.now())
         if query.count():
             table = {
                 '#': [],
